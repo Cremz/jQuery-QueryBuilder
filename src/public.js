@@ -165,14 +165,23 @@ QueryBuilder.prototype.getRules = function(options) {
             if (model.operator.nb_inputs !== 0) {
                 value = model.value;
             }
-
+            var value_label = value;
+            if (model.filter.values !== undefined) {
+                model.filter.values.forEach(function(obj) {
+                    if (Object.keys(obj)[0] == value) {
+                        value_label = obj[value];
+                    }
+                });
+            }
             var rule = {
                 id: model.filter.id,
                 field: model.filter.field,
+                label: model.filter.label,
                 type: model.filter.type,
                 input: model.filter.input,
                 operator: model.operator.type,
-                value: value
+                value: value,
+                value_label: value_label
             };
 
             if (model.filter.data || model.data) {
