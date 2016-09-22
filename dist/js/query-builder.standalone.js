@@ -1,271 +1,4 @@
 /*!
- * jQuery.extendext 0.1.1
- *
- * Copyright 2014 Damien "Mistic" Sorel (http://www.strangeplanet.fr)
- * Licensed under MIT (http://opensource.org/licenses/MIT)
- * 
- * Based on jQuery.extend by jQuery Foundation, Inc. and other contributors
- */
-
-(function(root, factory) {
-    if (typeof define === 'function' && define.amd) {
-        define('jQuery.extendext', ['jquery'], factory);
-    }
-    else {
-        factory(root.jQuery);
-    }
-}(this, function($) {
-  "use strict";
-
-  $.extendext = function() {
-    var options, name, src, copy, copyIsArray, clone,
-      target = arguments[0] || {},
-      i = 1,
-      length = arguments.length,
-      deep = false,
-      arrayMode = 'default';
-
-    // Handle a deep copy situation
-    if ( typeof target === "boolean" ) {
-      deep = target;
-
-      // Skip the boolean and the target
-      target = arguments[ i++ ] || {};
-    }
-
-    // Handle array mode parameter
-    if ( typeof target === "string" ) {
-      arrayMode = $([target.toLowerCase(), 'default']).filter(['default','concat','replace','extend'])[0];
-
-      // Skip the string param
-      target = arguments[ i++ ] || {};
-    }
-
-    // Handle case when target is a string or something (possible in deep copy)
-    if ( typeof target !== "object" && !$.isFunction(target) ) {
-      target = {};
-    }
-
-    // Extend jQuery itself if only one argument is passed
-    if ( i === length ) {
-      target = this;
-      i--;
-    }
-
-    for ( ; i < length; i++ ) {
-      // Only deal with non-null/undefined values
-      if ( (options = arguments[ i ]) !== null ) {
-        // Special operations for arrays
-        if ($.isArray(options) && arrayMode !== 'default') {
-          clone = target && $.isArray(target) ? target : [];
-
-          switch (arrayMode) {
-          case 'concat':
-            target = clone.concat( $.extend( deep, [], options ) );
-            break;
-
-          case 'replace':
-            target = $.extend( deep, [], options );
-            break;
-
-          case 'extend':
-            options.forEach(function(e, i) {
-              if (typeof e === 'object') {
-                var type = $.isArray(e) ? [] : {};
-                clone[i] = $.extendext( deep, arrayMode, clone[i] || type, e );
-
-              } else if (clone.indexOf(e) === -1) {
-                clone.push(e);
-              }
-            });
-
-            target = clone;
-            break;
-          }
-
-        } else {
-          // Extend the base object
-          for ( name in options ) {
-            src = target[ name ];
-            copy = options[ name ];
-
-            // Prevent never-ending loop
-            if ( target === copy ) {
-              continue;
-            }
-
-            // Recurse if we're merging plain objects or arrays
-            if ( deep && copy && ( $.isPlainObject(copy) ||
-              (copyIsArray = $.isArray(copy)) ) ) {
-
-              if ( copyIsArray ) {
-                copyIsArray = false;
-                clone = src && $.isArray(src) ? src : [];
-
-              } else {
-                clone = src && $.isPlainObject(src) ? src : {};
-              }
-
-              // Never move original objects, clone them
-              target[ name ] = $.extendext( deep, arrayMode, clone, copy );
-
-            // Don't bring in undefined values
-            } else if ( copy !== undefined ) {
-              target[ name ] = copy;
-            }
-          }
-        }
-      }
-    }
-
-    // Return the modified object
-    return target;
-  };
-}));
-
-// doT.js
-// 2011-2014, Laura Doktorova, https://github.com/olado/doT
-// Licensed under the MIT license.
-
-(function() {
-	"use strict";
-
-	var doT = {
-		version: "1.0.3",
-		templateSettings: {
-			evaluate:    /\{\{([\s\S]+?(\}?)+)\}\}/g,
-			interpolate: /\{\{=([\s\S]+?)\}\}/g,
-			encode:      /\{\{!([\s\S]+?)\}\}/g,
-			use:         /\{\{#([\s\S]+?)\}\}/g,
-			useParams:   /(^|[^\w$])def(?:\.|\[[\'\"])([\w$\.]+)(?:[\'\"]\])?\s*\:\s*([\w$\.]+|\"[^\"]+\"|\'[^\']+\'|\{[^\}]+\})/g,
-			define:      /\{\{##\s*([\w\.$]+)\s*(\:|=)([\s\S]+?)#\}\}/g,
-			defineParams:/^\s*([\w$]+):([\s\S]+)/,
-			conditional: /\{\{\?(\?)?\s*([\s\S]*?)\s*\}\}/g,
-			iterate:     /\{\{~\s*(?:\}\}|([\s\S]+?)\s*\:\s*([\w$]+)\s*(?:\:\s*([\w$]+))?\s*\}\})/g,
-			varname:	"it",
-			strip:		true,
-			append:		true,
-			selfcontained: false,
-			doNotSkipEncoded: false
-		},
-		template: undefined, //fn, compile template
-		compile:  undefined  //fn, for express
-	}, _globals;
-
-	doT.encodeHTMLSource = function(doNotSkipEncoded) {
-		var encodeHTMLRules = { "&": "&#38;", "<": "&#60;", ">": "&#62;", '"': "&#34;", "'": "&#39;", "/": "&#47;" },
-			matchHTML = doNotSkipEncoded ? /[&<>"'\/]/g : /&(?!#?\w+;)|<|>|"|'|\//g;
-		return function(code) {
-			return code ? code.toString().replace(matchHTML, function(m) {return encodeHTMLRules[m] || m;}) : "";
-		};
-	};
-
-	_globals = (function(){ return this || (0,eval)("this"); }());
-
-	if (typeof module !== "undefined" && module.exports) {
-		module.exports = doT;
-	} else if (typeof define === "function" && define.amd) {
-		define('doT', function(){return doT;});
-	} else {
-		_globals.doT = doT;
-	}
-
-	var startend = {
-		append: { start: "'+(",      end: ")+'",      startencode: "'+encodeHTML(" },
-		split:  { start: "';out+=(", end: ");out+='", startencode: "';out+=encodeHTML(" }
-	}, skip = /$^/;
-
-	function resolveDefs(c, block, def) {
-		return ((typeof block === "string") ? block : block.toString())
-		.replace(c.define || skip, function(m, code, assign, value) {
-			if (code.indexOf("def.") === 0) {
-				code = code.substring(4);
-			}
-			if (!(code in def)) {
-				if (assign === ":") {
-					if (c.defineParams) value.replace(c.defineParams, function(m, param, v) {
-						def[code] = {arg: param, text: v};
-					});
-					if (!(code in def)) def[code]= value;
-				} else {
-					new Function("def", "def['"+code+"']=" + value)(def);
-				}
-			}
-			return "";
-		})
-		.replace(c.use || skip, function(m, code) {
-			if (c.useParams) code = code.replace(c.useParams, function(m, s, d, param) {
-				if (def[d] && def[d].arg && param) {
-					var rw = (d+":"+param).replace(/'|\\/g, "_");
-					def.__exp = def.__exp || {};
-					def.__exp[rw] = def[d].text.replace(new RegExp("(^|[^\\w$])" + def[d].arg + "([^\\w$])", "g"), "$1" + param + "$2");
-					return s + "def.__exp['"+rw+"']";
-				}
-			});
-			var v = new Function("def", "return " + code)(def);
-			return v ? resolveDefs(c, v, def) : v;
-		});
-	}
-
-	function unescape(code) {
-		return code.replace(/\\('|\\)/g, "$1").replace(/[\r\t\n]/g, " ");
-	}
-
-	doT.template = function(tmpl, c, def) {
-		c = c || doT.templateSettings;
-		var cse = c.append ? startend.append : startend.split, needhtmlencode, sid = 0, indv,
-			str  = (c.use || c.define) ? resolveDefs(c, tmpl, def || {}) : tmpl;
-
-		str = ("var out='" + (c.strip ? str.replace(/(^|\r|\n)\t* +| +\t*(\r|\n|$)/g," ")
-					.replace(/\r|\n|\t|\/\*[\s\S]*?\*\//g,""): str)
-			.replace(/'|\\/g, "\\$&")
-			.replace(c.interpolate || skip, function(m, code) {
-				return cse.start + unescape(code) + cse.end;
-			})
-			.replace(c.encode || skip, function(m, code) {
-				needhtmlencode = true;
-				return cse.startencode + unescape(code) + cse.end;
-			})
-			.replace(c.conditional || skip, function(m, elsecase, code) {
-				return elsecase ?
-					(code ? "';}else if(" + unescape(code) + "){out+='" : "';}else{out+='") :
-					(code ? "';if(" + unescape(code) + "){out+='" : "';}out+='");
-			})
-			.replace(c.iterate || skip, function(m, iterate, vname, iname) {
-				if (!iterate) return "';} } out+='";
-				sid+=1; indv=iname || "i"+sid; iterate=unescape(iterate);
-				return "';var arr"+sid+"="+iterate+";if(arr"+sid+"){var "+vname+","+indv+"=-1,l"+sid+"=arr"+sid+".length-1;while("+indv+"<l"+sid+"){"
-					+vname+"=arr"+sid+"["+indv+"+=1];out+='";
-			})
-			.replace(c.evaluate || skip, function(m, code) {
-				return "';" + unescape(code) + "out+='";
-			})
-			+ "';return out;")
-			.replace(/\n/g, "\\n").replace(/\t/g, '\\t').replace(/\r/g, "\\r")
-			.replace(/(\s|;|\}|^|\{)out\+='';/g, '$1').replace(/\+''/g, "");
-			//.replace(/(\s|;|\}|^|\{)out\+=''\+/g,'$1out+=');
-
-		if (needhtmlencode) {
-			if (!c.selfcontained && _globals && !_globals._encodeHTML) _globals._encodeHTML = doT.encodeHTMLSource(c.doNotSkipEncoded);
-			str = "var encodeHTML = typeof _encodeHTML !== 'undefined' ? _encodeHTML : ("
-				+ doT.encodeHTMLSource.toString() + "(" + (c.doNotSkipEncoded || '') + "));"
-				+ str;
-		}
-		try {
-			return new Function(c.varname, str);
-		} catch (e) {
-			if (typeof console !== "undefined") console.log("Could not create a template function: " + str);
-			throw e;
-		}
-	};
-
-	doT.compile = function(tmpl, def) {
-		return doT.template(tmpl, null, def);
-	};
-}());
-
-
-/*!
  * jQuery QueryBuilder 2.3.3
  * Copyright 2014-2016 Damien "Mistic" Sorel (http://www.strangeplanet.fr)
  * Licensed under MIT (http://opensource.org/licenses/MIT)
@@ -540,6 +273,8 @@ QueryBuilder.DEFAULTS = {
 
     default_group_flags: {
         condition_readonly: false,
+        no_add_rule: false,
+        no_add_group: false,
         no_delete: false
     },
 
@@ -1096,7 +831,10 @@ QueryBuilder.prototype.addRule = function(parent, data, flags) {
     this.createRuleFilters(model);
 
     if (this.settings.default_filter || !this.settings.display_empty_filter) {
-        model.filter = this.getFilterById(this.settings.default_filter || this.filters[0].id);
+        model.filter = this.change('getDefaultFilter',
+            this.getFilterById(this.settings.default_filter || this.filters[0].id),
+            model
+        );
     }
 
     return model;
@@ -1294,6 +1032,12 @@ QueryBuilder.prototype.applyGroupFlags = function(group) {
         group.$el.find('>' + Selectors.group_condition).prop('disabled', true)
             .parent().addClass('readonly');
     }
+    if (flags.no_add_rule) {
+        group.$el.find(Selectors.add_rule).remove();
+    }
+    if (flags.no_add_group) {
+        group.$el.find(Selectors.add_group).remove();
+    }
     if (flags.no_delete) {
         group.$el.find(Selectors.delete_group).remove();
     }
@@ -1419,11 +1163,11 @@ QueryBuilder.prototype.clear = function() {
  * @param {object}
  */
 QueryBuilder.prototype.setOptions = function(options) {
-    // use jQuery utils to filter options keys
-    $.makeArray($(Object.keys(options)).filter(QueryBuilder.modifiable_options))
-        .forEach(function(opt) {
-            this.settings[opt] = options[opt];
-        }, this);
+    $.each(options, function(opt, value) {
+        if (QueryBuilder.modifiable_options.indexOf(opt) !== -1) {
+            this.settings[opt] = value;
+        }
+    }.bind(this));
 };
 
 /**
@@ -1530,14 +1274,23 @@ QueryBuilder.prototype.getRules = function(options) {
             if (model.operator.nb_inputs !== 0) {
                 value = model.value;
             }
-
+            var value_label = value;
+            if (model.filter.values !== undefined) {
+                model.filter.values.forEach(function(obj) {
+                    if (Object.keys(obj)[0] == value) {
+                        value_label = obj[value];
+                    }
+                });
+            }
             var rule = {
                 id: model.filter.id,
                 field: model.filter.field,
+                label: model.filter.label,
                 type: model.filter.type,
                 input: model.filter.input,
                 operator: model.operator.type,
-                value: value
+                value: value,
+                value_label: value_label
             };
 
             if (model.filter.data || model.data) {
@@ -1604,7 +1357,8 @@ QueryBuilder.prototype.setRules = function(data) {
 
         data.rules.forEach(function(item) {
             var model;
-            if (item.rules && item.rules.length > 0) {
+
+            if (item.rules !== undefined) {
                 if (self.settings.allow_groups !== -1 && self.settings.allow_groups < group.level) {
                     self.reset();
                     Utils.error('RulesParse', 'No more than {0} groups are allowed', self.settings.allow_groups);
@@ -1619,11 +1373,13 @@ QueryBuilder.prototype.setRules = function(data) {
                 }
             }
             else {
-                if (item.id === undefined) {
-                    Utils.error('RulesParse', 'Missing rule field id');
-                }
-                if (item.operator === undefined) {
-                    item.operator = 'equal';
+                if (!item.empty) {
+                    if (item.id === undefined) {
+                        Utils.error('RulesParse', 'Missing rule field id');
+                    }
+                    if (item.operator === undefined) {
+                        item.operator = 'equal';
+                    }
                 }
 
                 model = self.addRule(group, item.data);
@@ -1631,13 +1387,16 @@ QueryBuilder.prototype.setRules = function(data) {
                     return;
                 }
 
-                model.filter = self.getFilterById(item.id);
-                model.operator = self.getOperatorByType(item.operator);
-                model.flags = self.parseRuleFlags(item);
+                if (!item.empty) {
+                    model.filter = self.getFilterById(item.id);
+                    model.operator = self.getOperatorByType(item.operator);
 
-                if (model.operator.nb_inputs !== 0 && item.value !== undefined) {
-                    model.value = item.value;
+                    if (model.operator.nb_inputs !== 0 && item.value !== undefined) {
+                        model.value = item.value;
+                    }
                 }
+
+                model.flags = self.parseRuleFlags(item);
             }
         });
 
@@ -2104,6 +1863,8 @@ QueryBuilder.prototype.parseGroupFlags = function(group) {
     if (group.readonly) {
         $.extend(flags, {
             condition_readonly: true,
+            no_add_rule: true,
+            no_add_group: true,
             no_delete: true
         });
     }
@@ -2216,8 +1977,13 @@ QueryBuilder.templates.filterSelect = '\
 </select>';
 
 QueryBuilder.templates.operatorSelect = '\
+{{? it.operators.length === 1 }} \
+<span> \
+{{= it.lang.operators[it.operators[0].type] || it.operators[0].type }} \
+</span> \
+{{?}} \
 {{ var optgroup = null; }} \
-<select class="form-control" name="{{= it.rule.id }}_operator"> \
+<select class="form-control {{? it.operators.length === 1 }}hide{{?}}" name="{{= it.rule.id }}_operator"> \
   {{~ it.operators: operator }} \
     {{? optgroup !== operator.optgroup }} \
       {{? optgroup !== null }}</optgroup>{{?}} \
@@ -2580,7 +2346,7 @@ Node.prototype.moveAtEnd = function(target) {
         target = this.parent;
     }
 
-    this._move(target, target.length() - 1);
+    this._move(target, target.length() === 0 ? 0 : target.length() - 1);
 
     return this;
 };
@@ -3185,6 +2951,7 @@ QueryBuilder.extend({
                       self.createRuleFilters(rule);
 
                       rule.$el.find(Selectors.rule_filter).val(rule.filter ? rule.filter.id : '-1');
+                      self.trigger('afterUpdateRuleFilter', rule);
                   }
               },
               updateBuilder
@@ -3797,9 +3564,6 @@ QueryBuilder.define('sortable', function(options) {
      * Init HTML5 drag and drop
      */
     this.on('afterInit', function(e) {
-        // configure jQuery to use dataTransfer
-        $.event.props.push('dataTransfer');
-
         var placeholder;
         var src;
         var self = e.builder;
@@ -3818,7 +3582,7 @@ QueryBuilder.define('sortable', function(options) {
             e.stopPropagation();
 
             // notify drag and drop (only dummy text)
-            e.dataTransfer.setData('text', 'drag');
+            e.originalEvent.dataTransfer.setData('text', 'drag');
 
             src = Model(e.target);
 
@@ -4407,9 +4171,37 @@ QueryBuilder.define('unique-filter', function() {
     this.on('afterCreateRuleFilters', this.applyDisabledFilters);
     this.on('afterReset', this.clearDisabledFilters);
     this.on('afterClear', this.clearDisabledFilters);
+
+    /**
+     * Ensure that the default filter is not already used if unique
+     * @throws UniqueFilterError
+     */
+    this.on('getDefaultFilter.filter', function(e, model) {
+        var self = e.builder;
+
+        self.updateDisabledFilters();
+
+        if (e.value.id in self.status.used_filters) {
+            var found = self.filters.some(function(filter) {
+                if (!(filter.id in self.status.used_filters) || self.status.used_filters[filter.id].length > 0 && self.status.used_filters[filter.id].indexOf(model.parent) === -1) {
+                    e.value = filter;
+                    return true;
+                }
+            });
+
+            if (!found) {
+                Utils.error('UniqueFilter', 'No more non-unique filters available');
+                e.value = undefined;
+            }
+        }
+    });
 });
 
 QueryBuilder.extend({
+    /**
+     * Update the list of used filters
+     * @param [e]
+     */
     updateDisabledFilters: function(e) {
         var self = e ? e.builder : this;
 
@@ -4438,6 +4230,10 @@ QueryBuilder.extend({
         self.applyDisabledFilters(e);
     },
 
+    /**
+     * Clear the list of used filters
+     * @param [e]
+     */
     clearDisabledFilters: function(e) {
         var self = e ? e.builder : this;
 
@@ -4446,6 +4242,10 @@ QueryBuilder.extend({
         self.applyDisabledFilters(e);
     },
 
+    /**
+     * Disabled filters depending on the list of used ones
+     * @param [e]
+     */
     applyDisabledFilters: function(e) {
         var self = e ? e.builder : this;
 

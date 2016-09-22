@@ -273,6 +273,8 @@ QueryBuilder.DEFAULTS = {
 
     default_group_flags: {
         condition_readonly: false,
+        no_add_rule: false,
+        no_add_group: false,
         no_delete: false
     },
 
@@ -829,7 +831,10 @@ QueryBuilder.prototype.addRule = function(parent, data, flags) {
     this.createRuleFilters(model);
 
     if (this.settings.default_filter || !this.settings.display_empty_filter) {
-        model.filter = this.getFilterById(this.settings.default_filter || this.filters[0].id);
+        model.filter = this.change('getDefaultFilter',
+            this.getFilterById(this.settings.default_filter || this.filters[0].id),
+            model
+        );
     }
 
     return model;
@@ -1027,6 +1032,12 @@ QueryBuilder.prototype.applyGroupFlags = function(group) {
         group.$el.find('>' + Selectors.group_condition).prop('disabled', true)
             .parent().addClass('readonly');
     }
+    if (flags.no_add_rule) {
+        group.$el.find(Selectors.add_rule).remove();
+    }
+    if (flags.no_add_group) {
+        group.$el.find(Selectors.add_group).remove();
+    }
     if (flags.no_delete) {
         group.$el.find(Selectors.delete_group).remove();
     }
@@ -1152,11 +1163,11 @@ QueryBuilder.prototype.clear = function() {
  * @param {object}
  */
 QueryBuilder.prototype.setOptions = function(options) {
-    // use jQuery utils to filter options keys
-    $.makeArray($(Object.keys(options)).filter(QueryBuilder.modifiable_options))
-        .forEach(function(opt) {
-            this.settings[opt] = options[opt];
-        }, this);
+    $.each(options, function(opt, value) {
+        if (QueryBuilder.modifiable_options.indexOf(opt) !== -1) {
+            this.settings[opt] = value;
+        }
+    }.bind(this));
 };
 
 /**
@@ -1263,14 +1274,23 @@ QueryBuilder.prototype.getRules = function(options) {
             if (model.operator.nb_inputs !== 0) {
                 value = model.value;
             }
-
+            var value_label = value;
+            if (model.filter.values !== undefined) {
+                model.filter.values.forEach(function(obj) {
+                    if (Object.keys(obj)[0] == value) {
+                        value_label = obj[value];
+                    }
+                });
+            }
             var rule = {
                 id: model.filter.id,
                 field: model.filter.field,
+                label: model.filter.label,
                 type: model.filter.type,
                 input: model.filter.input,
                 operator: model.operator.type,
-                value: value
+                value: value,
+                value_label: value_label
             };
 
             if (model.filter.data || model.data) {
@@ -1337,7 +1357,8 @@ QueryBuilder.prototype.setRules = function(data) {
 
         data.rules.forEach(function(item) {
             var model;
-            if (item.rules && item.rules.length > 0) {
+
+            if (item.rules !== undefined) {
                 if (self.settings.allow_groups !== -1 && self.settings.allow_groups < group.level) {
                     self.reset();
                     Utils.error('RulesParse', 'No more than {0} groups are allowed', self.settings.allow_groups);
@@ -1352,11 +1373,13 @@ QueryBuilder.prototype.setRules = function(data) {
                 }
             }
             else {
-                if (item.id === undefined) {
-                    Utils.error('RulesParse', 'Missing rule field id');
-                }
-                if (item.operator === undefined) {
-                    item.operator = 'equal';
+                if (!item.empty) {
+                    if (item.id === undefined) {
+                        Utils.error('RulesParse', 'Missing rule field id');
+                    }
+                    if (item.operator === undefined) {
+                        item.operator = 'equal';
+                    }
                 }
 
                 model = self.addRule(group, item.data);
@@ -1364,13 +1387,16 @@ QueryBuilder.prototype.setRules = function(data) {
                     return;
                 }
 
-                model.filter = self.getFilterById(item.id);
-                model.operator = self.getOperatorByType(item.operator);
-                model.flags = self.parseRuleFlags(item);
+                if (!item.empty) {
+                    model.filter = self.getFilterById(item.id);
+                    model.operator = self.getOperatorByType(item.operator);
 
-                if (model.operator.nb_inputs !== 0 && item.value !== undefined) {
-                    model.value = item.value;
+                    if (model.operator.nb_inputs !== 0 && item.value !== undefined) {
+                        model.value = item.value;
+                    }
                 }
+
+                model.flags = self.parseRuleFlags(item);
             }
         });
 
@@ -1837,6 +1863,8 @@ QueryBuilder.prototype.parseGroupFlags = function(group) {
     if (group.readonly) {
         $.extend(flags, {
             condition_readonly: true,
+            no_add_rule: true,
+            no_add_group: true,
             no_delete: true
         });
     }
@@ -1949,8 +1977,13 @@ QueryBuilder.templates.filterSelect = '\
 </select>';
 
 QueryBuilder.templates.operatorSelect = '\
+{{? it.operators.length === 1 }} \
+<span> \
+{{= it.lang.operators[it.operators[0].type] || it.operators[0].type }} \
+</span> \
+{{?}} \
 {{ var optgroup = null; }} \
-<select class="form-control" name="{{= it.rule.id }}_operator"> \
+<select class="form-control {{? it.operators.length === 1 }}hide{{?}}" name="{{= it.rule.id }}_operator"> \
   {{~ it.operators: operator }} \
     {{? optgroup !== operator.optgroup }} \
       {{? optgroup !== null }}</optgroup>{{?}} \
@@ -2313,7 +2346,7 @@ Node.prototype.moveAtEnd = function(target) {
         target = this.parent;
     }
 
-    this._move(target, target.length() - 1);
+    this._move(target, target.length() === 0 ? 0 : target.length() - 1);
 
     return this;
 };
@@ -2918,6 +2951,7 @@ QueryBuilder.extend({
                       self.createRuleFilters(rule);
 
                       rule.$el.find(Selectors.rule_filter).val(rule.filter ? rule.filter.id : '-1');
+                      self.trigger('afterUpdateRuleFilter', rule);
                   }
               },
               updateBuilder
@@ -3530,9 +3564,6 @@ QueryBuilder.define('sortable', function(options) {
      * Init HTML5 drag and drop
      */
     this.on('afterInit', function(e) {
-        // configure jQuery to use dataTransfer
-        $.event.props.push('dataTransfer');
-
         var placeholder;
         var src;
         var self = e.builder;
@@ -3551,7 +3582,7 @@ QueryBuilder.define('sortable', function(options) {
             e.stopPropagation();
 
             // notify drag and drop (only dummy text)
-            e.dataTransfer.setData('text', 'drag');
+            e.originalEvent.dataTransfer.setData('text', 'drag');
 
             src = Model(e.target);
 
@@ -4140,9 +4171,37 @@ QueryBuilder.define('unique-filter', function() {
     this.on('afterCreateRuleFilters', this.applyDisabledFilters);
     this.on('afterReset', this.clearDisabledFilters);
     this.on('afterClear', this.clearDisabledFilters);
+
+    /**
+     * Ensure that the default filter is not already used if unique
+     * @throws UniqueFilterError
+     */
+    this.on('getDefaultFilter.filter', function(e, model) {
+        var self = e.builder;
+
+        self.updateDisabledFilters();
+
+        if (e.value.id in self.status.used_filters) {
+            var found = self.filters.some(function(filter) {
+                if (!(filter.id in self.status.used_filters) || self.status.used_filters[filter.id].length > 0 && self.status.used_filters[filter.id].indexOf(model.parent) === -1) {
+                    e.value = filter;
+                    return true;
+                }
+            });
+
+            if (!found) {
+                Utils.error('UniqueFilter', 'No more non-unique filters available');
+                e.value = undefined;
+            }
+        }
+    });
 });
 
 QueryBuilder.extend({
+    /**
+     * Update the list of used filters
+     * @param [e]
+     */
     updateDisabledFilters: function(e) {
         var self = e ? e.builder : this;
 
@@ -4171,6 +4230,10 @@ QueryBuilder.extend({
         self.applyDisabledFilters(e);
     },
 
+    /**
+     * Clear the list of used filters
+     * @param [e]
+     */
     clearDisabledFilters: function(e) {
         var self = e ? e.builder : this;
 
@@ -4179,6 +4242,10 @@ QueryBuilder.extend({
         self.applyDisabledFilters(e);
     },
 
+    /**
+     * Disabled filters depending on the list of used ones
+     * @param [e]
+     */
     applyDisabledFilters: function(e) {
         var self = e ? e.builder : this;
 
